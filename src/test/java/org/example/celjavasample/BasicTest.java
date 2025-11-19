@@ -21,6 +21,9 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
 public class BasicTest {
 
     @Test
@@ -79,7 +82,7 @@ public class BasicTest {
         );
 
         List<Map<String, Object>> list = (List<Map<String, Object>>) program.eval(input);
-        Assertions.assertEquals(2, list.size());
+        assertEquals(2, list.size());
     }
 
 
@@ -117,7 +120,7 @@ public class BasicTest {
         Map<String, Object> input = (Map<String, Object>) CelJsonUtils.convertNumbers(raw);
 
         List<Map<String, Object>> list = (List<Map<String, Object>>) program.eval(input);
-        Assertions.assertEquals(2, list.size());
+        assertEquals(2, list.size());
     }
 
     private CelCompiler createCompiler() {
@@ -159,10 +162,10 @@ public class BasicTest {
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> result = (List<Map<String, Object>>) program.eval(input);
 
-        Assertions.assertEquals(1, result.size());
-        Assertions.assertEquals("ITM-001", result.get(0).get("id"));
-        Assertions.assertEquals(600000L, result.get(0).get("totalValue"));
-        Assertions.assertEquals(true, result.get(0).get("discountEligible"));
+        assertEquals(1, result.size());
+        assertEquals("ITM-001", result.get(0).get("id"));
+        assertEquals(600000L, result.get(0).get("totalValue"));
+        assertEquals(true, result.get(0).get("discountEligible"));
     }
 
     private CelRuntime.Program compileAndCreateProgram(String expr)
@@ -266,6 +269,88 @@ public class BasicTest {
         CelCompiler compiler = createCompiler();
         CelValidationResult result = compiler.compile(expr, json);
         Assertions.assertTrue(result.hasError());
+    }
+
+    @Test
+    void testVariousNullChecks() {
+        CelCompiler compiler = CelCompilerFactory.standardCelCompilerBuilder()
+                .setStandardMacros(CelStandardMacro.STANDARD_MACROS)
+                .addVar("items", SimpleType.DYN)  // ✅ Dynamic type untuk != null
+                .build();
+
+        // Hanya expressions yang benar-benar valid dengan variabel 'items'
+        String[] expressions = {
+                "items != null",                       // Null check
+                "items == null",                       // Null check reverse
+                "items != null && size(items) > 0",    // Null check + size
+                "items == null || size(items) == 0",   // Null check OR size
+                "size(items) > 0",                     // Direct size check
+                "items.size() > 0",                    // Method syntax
+                "items.filter(x, true).size() > 0",    // List operation
+        };
+
+        for (String expr : expressions) {
+            CelValidationResult result = compiler.compile(expr);
+            System.out.println("Expression: " + expr + " -> " + (result.hasError() ? "ERROR" : "VALID"));
+            if (result.hasError()) {
+                result.getErrors().forEach(err -> System.out.println("  - " + err.getMessage()));
+            }
+            assertFalse(result.hasError(), "Expression '" + expr + "' should be valid");
+        }
+    }
+
+    @Test
+    void testItemsVarRegistered2() {
+        CelCompiler compiler = CelCompilerFactory.standardCelCompilerBuilder()
+                .setStandardMacros(CelStandardMacro.STANDARD_MACROS)
+                .addVar("items", SimpleType.DYN)  // ✅ Dynamic type untuk != null
+                .build();
+
+        var result = compiler.compile("items != null");
+        System.out.println("result = " + result);
+        assertFalse(result.hasError(),
+                "Expression 'items != null' seharusnya valid. Errors: " + result.getErrors());
+    }
+
+    @Test
+    void testVariousNullChecksFixed() {
+        CelCompiler compiler = CelCompilerFactory.standardCelCompilerBuilder()
+                .setStandardMacros(CelStandardMacro.STANDARD_MACROS)
+                .addVar("items", SimpleType.DYN)
+                .build();
+
+        // Hanya expressions yang benar-benar valid dengan variabel 'items'
+        String[] expressions = {
+                "items != null",                       // Null check
+                "items == null",                       // Null check reverse
+                "items != null && size(items) > 0",    // Null check + size
+                "items == null || size(items) == 0",   // Null check OR size
+                "size(items) > 0",                     // Direct size check
+                "items.size() > 0",                    // Method syntax
+                "items.filter(x, true).size() > 0",    // List operation
+        };
+
+        int passed = 0;
+        int failed = 0;
+
+        for (String expr : expressions) {
+            CelValidationResult result = compiler.compile(expr);
+            boolean isValid = !result.hasError();
+            System.out.println("Expression: " + expr + " -> " + (isValid ? "VALID" : "ERROR"));
+
+            if (isValid) {
+                passed++;
+            } else {
+                failed++;
+                result.getErrors().forEach(err -> System.out.println("  - " + err.getMessage()));
+            }
+
+            assertFalse(result.hasError(), "Expression '" + expr + "' should be valid");
+        }
+
+        System.out.println("=== SUMMARY ===");
+        System.out.println("Passed: " + passed + ", Failed: " + failed);
+        assertEquals(expressions.length, passed, "All expressions should be valid");
     }
 
 }
